@@ -20,5 +20,4 @@ chmod +x n8n.sh
 - Cài đặt và cấu hình PM2: Cài pm2 toàn cục. Khởi động n8n bằng PM2 và cấu hình để tự động khởi động lại sau reboot (pm2 startup + pm2 save).
 - Cài đặt và cấu hình Nginx: Cài nginx. Tạo virtual host reverse-proxy, chuyển tiếp mọi request tới http://localhost:5678, thêm header WebSocket (Upgrade/Connection).
 - Xin SSL LetsEncrypt: Cài certbot và plugin python3-certbot-nginx. Chạy certbot --nginx để tự động cấp và cài chứng chỉ SSL cho domain.
-
-# Cuối cùng script sẽ in ra URL truy cập (https://domain) và nhắc bạn tự tạo tài khoản admin cho lần đầu.
+- Cuối cùng script sẽ in ra URL truy cập (https://domain) và nhắc bạn tự tạo tài khoản admin cho lần đầu.

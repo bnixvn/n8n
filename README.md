@@ -1,13 +1,13 @@
-# n8n
+<h2>Cài đặt n8n</h2>
 Cài n8n với Node.js 22 qua nvm, PostgreSQL, PM2, Nginx, SSL Let’s Encrypt
-# Cách cài đặt:
+<h2>Cách cài đặt:</h2>
 Các bạn login SSH và chạy các lệnh sau:
 <pre>
 wget https://raw.githubusercontent.com/bnixvn/n8n/refs/heads/main/n8n.sh
 chmod +x n8n.sh
 ./n8n.sh
 </pre>
-# Lưu ý: Phải trỏ subdomain/domain về IP VPS trước khi thực hiện
+<strong style="color:red;">Lưu ý: Phải trỏ subdomain/domain về IP VPS trước khi thực hiện</strong>
 <h2>Bản script của bạn tự động làm những việc sau: </h2>
 
 - Kiểm tra và cập nhật môi trường: Chạy apt update, cài các gói cơ bản như dnsutils, git, curl, build-essential để có các công cụ cần thiết (dig, build-tools, v.v.).

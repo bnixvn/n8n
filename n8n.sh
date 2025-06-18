@@ -5,6 +5,13 @@ if [ "$EUID" -ne 0 ]; then
   echo "❌ Vui lòng chạy script bằng quyền root!"
   exit 1
 fi
+# 2. Cập nhật hệ điều hành trước khi cài đặt
+echo "🔄 Đang cập nhật danh sách gói và nâng cấp hệ điều hành..."
+apt update -y || { echo "❌ Lỗi khi chạy apt update"; exit 1; }
+apt upgrade -y || { echo "❌ Lỗi khi chạy apt upgrade"; exit 1; }
+# (tuỳ chọn) dọn dẹp
+apt autoremove -y
+apt autoclean -y
 
 # Nhập domain
 read -p "Nhập domain bạn muốn cài n8n (ví dụ: n8n.tenmien.com): " DOMAIN
@@ -15,7 +22,6 @@ fi
 
 # Cài dnsutils, git, curl, build-essential
 echo "🔧 Cập nhật gói và cài dnsutils, git, curl, build-essential..."
-apt update || { echo "❌ Lỗi cập nhật apt"; exit 1; }
 apt install -y dnsutils git curl build-essential nginx postgresql certbot python3-certbot-nginx || { echo "❌ Lỗi cài các gói cần thiết"; exit 1; }
 
 # Kiểm tra lệnh dig

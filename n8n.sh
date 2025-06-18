@@ -13,13 +13,6 @@ apt upgrade -y || { echo "❌ Lỗi khi chạy apt upgrade"; exit 1; }
 apt autoremove -y
 apt autoclean -y
 
-# Nhập domain
-read -p "Nhập domain bạn muốn cài n8n (ví dụ: n8n.tenmien.com): " DOMAIN
-if [[ ! "$DOMAIN" =~ ^[a-zA-Z0-9.-]+$ || ! "$DOMAIN" =~ \. ]]; then
-  echo "❌ Domain không hợp lệ (chỉ cho phép chữ, số, dấu gạch ngang và dấu chấm)!"
-  exit 1
-fi
-
 # Cài dnsutils, git, curl, build-essential
 echo "🔧 Cập nhật gói và cài dnsutils, git, curl, build-essential..."
 apt install -y dnsutils git curl build-essential nginx postgresql certbot python3-certbot-nginx || { echo "❌ Lỗi cài các gói cần thiết"; exit 1; }
@@ -27,6 +20,12 @@ apt install -y dnsutils git curl build-essential nginx postgresql certbot python
 # Kiểm tra lệnh dig
 if ! command -v dig &>/dev/null; then
   echo "❌ Lệnh dig không có sẵn!"
+  exit 1
+fi
+# Nhập domain
+read -p "Nhập domain bạn muốn cài n8n (ví dụ: n8n.tenmien.com): " DOMAIN
+if [[ ! "$DOMAIN" =~ ^[a-zA-Z0-9.-]+$ || ! "$DOMAIN" =~ \. ]]; then
+  echo "❌ Domain không hợp lệ (chỉ cho phép chữ, số, dấu gạch ngang và dấu chấm)!"
   exit 1
 fi
 

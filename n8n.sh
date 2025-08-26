@@ -151,7 +151,7 @@ systemctl daemon-reload
 
 # 🌐 Cấu hình Nginx proxy
 echo "🌐 Cấu hình Nginx cho $DOMAIN..."
-NGINX_CONF="/etc/nginx/sites-available/$DOMAIN"
+NGINX_CONF="/etc/nginx/conf.d/$DOMAIN.conf"
 
 cat > "$NGINX_CONF" <<EOT
 server {
@@ -168,8 +168,6 @@ server {
     }
 }
 EOT
-
-ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/
 
 nginx -t
 

@@ -177,7 +177,7 @@ systemctl reload nginx
 
 # 🛡 Cài SSL với Certbot
 echo "🔒 Xin và cài SSL cho $DOMAIN..."
-certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "admin@$DOMAIN" || {
+certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "legiang360@gmail.com" || {
   echo "❌ Lỗi khi cài SSL"
   exit 1
 }

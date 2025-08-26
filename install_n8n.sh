@@ -17,12 +17,9 @@ echo "Cài n8n và PM2..."
 npm install -g n8n pm2
 
 echo "Khởi động n8n với PM2..."
-export WEBHOOK_URL="https://$DOMAIN"
-pm2 start $(which n8n) --name n8n -- --tunnel
-pm2 save
-
-# Thiết lập pm2 tự khởi động cùng hệ thống (chạy lệnh in ra bởi pm2 startup)
-eval $(pm2 startup systemd -u root --hp /root)
+echo "Khởi động n8n với PM2..."
+WEBHOOK_URL="https://$DOMAIN" pm2 start n8n
+pm2 save && pm2 startup
 
 # Cấu hình Nginx
 cat >/etc/nginx/conf.d/n8n.conf <<EOL

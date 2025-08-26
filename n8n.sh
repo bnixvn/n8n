@@ -1,131 +1,104 @@
 #!/bin/bash
 
-set -euo pipefail
-
-# --- Kiểm tra quyền root
+# Kiểm tra quyền root
 if [ "$EUID" -ne 0 ]; then
   echo "❌ Vui lòng chạy script bằng quyền root!"
   exit 1
 fi
+# 2. Cập nhật hệ điều hành trước khi cài đặt
+echo "🔄 Đang cập nhật danh sách gói và nâng cấp hệ điều hành..."
+apt update -y || { echo "❌ Lỗi khi chạy apt update"; exit 1; }
+apt upgrade -y || { echo "❌ Lỗi khi chạy apt upgrade"; exit 1; }
+# (tuỳ chọn) dọn dẹp
+apt autoremove -y
+apt autoclean -y
 
-echo "🔄 Cập nhật hệ thống và cài đặt các gói cần thiết..."
-apt update -y
-apt upgrade -y
-apt install -y dnsutils git curl build-essential nginx postgresql certbot python3-certbot-nginx sudo
+# Cài dnsutils, git, curl, build-essential
+echo "🔧 Cập nhật gói và cài dnsutils, git, curl, build-essential..."
+apt install -y dnsutils git curl build-essential nginx postgresql certbot python3-certbot-nginx || { echo "❌ Lỗi cài các gói cần thiết"; exit 1; }
 
-# --- Tạo user n8n nếu chưa có
-if id "n8n" &>/dev/null; then
-  echo "👤 User n8n đã tồn tại, bỏ qua tạo user."
-else
-  echo "👤 Tạo user n8n không có quyền sudo..."
-  useradd -m -s /bin/bash n8n
+# Kiểm tra lệnh dig
+if ! command -v dig &>/dev/null; then
+  echo "❌ Lệnh dig không có sẵn!"
+  exit 1
+fi
+# Nhập domain
+read -p "Nhập domain bạn muốn cài n8n (ví dụ: n8n.tenmien.com): " DOMAIN
+if [[ ! "$DOMAIN" =~ ^[a-zA-Z0-9.-]+$ || ! "$DOMAIN" =~ \. ]]; then
+  echo "❌ Domain không hợp lệ (chỉ cho phép chữ, số, dấu gạch ngang và dấu chấm)!"
+  exit 1
 fi
 
-N8N_HOME="/home/n8n"
-
-# --- Hàm chạy lệnh dưới tài khoản n8n bằng heredoc
-run_as_n8n() {
-  sudo -i -u n8n bash - <<'EOF'
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-bash -c "$*"
-EOF
-}
-
-# --- Cài nvm nếu chưa có
-if [ ! -d "$N8N_HOME/.nvm" ]; then
-  echo "📦 Cài nvm cho user n8n..."
-  sudo -i -u n8n bash -c "git clone https://github.com/nvm-sh/nvm.git ~/.nvm && cd ~/.nvm && git checkout v0.39.4"
-  echo 'export NVM_DIR="$HOME/.nvm"' >> "$N8N_HOME/.bashrc"
-  echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> "$N8N_HOME/.bashrc"
+# Kiểm tra DNS trỏ đến IP server
+echo "🔍 Kiểm tra DNS cho domain $DOMAIN..."
+SERVER_IP=$(hostname -I | awk '{print $1}')
+DOMAIN_IP=$(dig +short A "$DOMAIN" | head -n1)
+echo "IP server: $SERVER_IP"
+echo "IP domain: $DOMAIN_IP"
+if [[ -z "$DOMAIN_IP" || "$DOMAIN_IP" != "$SERVER_IP" ]]; then
+  echo "❌ Domain $DOMAIN chưa trỏ đến IP server ($SERVER_IP). Vui lòng kiểm tra DNS."
+  exit 1
 fi
 
-echo "⬇️ Cài đặt Node.js 22, npm, n8n và pm2 dưới user n8n..."
-sudo -i -u n8n bash - <<'EOF'
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+# Thư mục cài đặt
+INSTALL_DIR="/home/n8n"
 
-nvm install 22
-nvm alias default 22
-
-npm install -g npm@latest
-
-cd ~
-
-# Khởi tạo package.json nếu chưa có
-if [ ! -f package.json ]; then
-  npm init -y
+# Kiểm tra thư mục rỗng
+if [[ -d "$INSTALL_DIR" && "$(ls -A "$INSTALL_DIR")" ]]; then
+  echo "❌ Thư mục $INSTALL_DIR không rỗng!"
+  exit 1
 fi
 
-npm install n8n@latest
-npm install -g pm2@latest
+echo "👉 Cài n8n vào: $INSTALL_DIR với root"
 
-# Tạo script khởi động hệ thống PM2 và chạy
-STARTUP_CMD=$(pm2 startup systemd -u n8n --hp /home/n8n)
-echo "$STARTUP_CMD" > /tmp/pm2-startup.sh
-chmod +x /tmp/pm2-startup.sh
-EOF
+# Tạo thư mục cài đặt
+mkdir -p "$INSTALL_DIR" || { echo "❌ Lỗi tạo thư mục $INSTALL_DIR"; exit 1; }
 
-# Chạy lệnh script tạo service PM2 với quyền root (bắt buộc)
-bash /tmp/pm2-startup.sh
-rm /tmp/pm2-startup.sh
-
-# --- Tạo database PostgreSQL và user
-echo "🗃 Tạo database và user PostgreSQL cho n8n..."
+# Tạo PostgreSQL database
+echo "🗃 Tạo database PostgreSQL..."
+systemctl is-active --quiet postgresql || { echo "❌ PostgreSQL không chạy!"; exit 1; }
 DB_NAME="n8ndb"
 DB_USER="n8nuser"
-DB_PASS=""
+DB_PASS="$(openssl rand -hex 16)"
 
-if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" | grep -q 1; then
-  DB_PASS=$(openssl rand -hex 16)
-  echo "🔑 Mật khẩu database PostgreSQL được tạo: $DB_PASS"
+cd /tmp || { echo "❌ Không thể chuyển thư mục làm việc sang /tmp"; exit 1; }
 
-  if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'" | grep -q 1; then
-    sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASS';"
-  fi
-  
-  sudo -u postgres psql -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;"
-else
-  echo "✅ Database $DB_NAME đã tồn tại. Vui lòng tự quản lý mật khẩu user PostgreSQL tương ứng."
-  DB_PASS="(bạn chưa biết mật khẩu user PostgreSQL, vui lòng thay đổi thủ công nếu muốn)"
+# Tạo user PostgreSQL nếu chưa có
+if ! sudo -u postgres psql -q -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'" | grep -q 1; then
+  sudo -u postgres psql -q -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASS';" \
+    || { echo "❌ Lỗi tạo user PostgreSQL"; exit 1; }
 fi
 
-# --- Nhập domain
-read -rp "Nhập domain bạn muốn cài n8n (ví dụ n8n.example.com): " DOMAIN
-
-# Validate domain
-if [[ ! "$DOMAIN" =~ ^[a-zA-Z0-9.-]+$ ]] || [[ "$DOMAIN" != *.* ]]; then
-  echo "❌ Domain không hợp lệ"
-  exit 1
+# Tạo database nếu chưa có
+if ! sudo -u postgres psql -q -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" | grep -q 1; then
+  sudo -u postgres psql -q -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;" \
+    || { echo "❌ Lỗi tạo database PostgreSQL"; exit 1; }
 fi
 
-echo "🔍 Kiểm tra DNS cho domain $DOMAIN..."
+# Cài nvm, Node.js 22, n8n và PM2
+echo "⬇️ Cài đặt nvm, Node.js 22, n8n và PM2..."
+export NVM_DIR="/root/.nvm"
+git clone https://github.com/nvm-sh/nvm.git "$NVM_DIR"
+cd "$NVM_DIR" && git checkout v0.39.4
+source "$NVM_DIR/nvm.sh"
 
-DOMAIN_IP=$(dig +short A "$DOMAIN" | head -n1)
-SERVER_IP=$(hostname -I | tr ' ' '\n' | grep -vE '^127\.' | head -n1)
+# Thêm nvm vào ~/.bashrc để chạy tự động khi khởi động
+echo 'export NVM_DIR="/root/.nvm"' >> ~/.bashrc
+echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> ~/.bashrc
+source ~/.bashrc
 
-echo "IP domain: $DOMAIN_IP"
-echo "IP server (interface chính): $SERVER_IP"
+# Cài Node.js 22
+nvm install 22
+nvm alias default 22
+echo "⚡ Node.js version: $(node -v)"
 
-if [[ -z "$DOMAIN_IP" ]]; then
-  echo "❌ Không tìm thấy bản ghi A của domain."
-  exit 1
-fi
+# Cài n8n
+cd "$INSTALL_DIR"
+npm init -y
+npm install n8n || { echo "❌ Lỗi cài n8n"; exit 1; }
 
-if [[ "$DOMAIN_IP" == "$SERVER_IP" ]]; then
-  echo "✅ Domain trỏ về IP server."
-elif [[ "$DOMAIN_IP" == "127.0.0.1" ]] || [[ "$DOMAIN_IP" == "127.0.1.1" ]]; then
-  echo "⚠️ Domain trỏ về loopback IP. Có thể gây lỗi SSL!"
-else
-  echo "❌ Domain không trỏ về IP server hoặc loopback. Vui lòng kiểm tra lại DNS."
-  exit 1
-fi
-
-mkdir -p "$N8N_HOME"
-chown n8n:n8n "$N8N_HOME"
-
-# --- Tạo file .env cho n8n
-cat > "$N8N_HOME/.env" <<EOT
+# Tạo .env
+cat <<EOT > "$INSTALL_DIR/.env"
 DB_TYPE=postgresdb
 DB_POSTGRESDB_HOST=localhost
 DB_POSTGRESDB_PORT=5432
@@ -138,25 +111,17 @@ N8N_PORT=5678
 WEBHOOK_URL=https://$DOMAIN/
 EOT
 
-chown n8n:n8n "$N8N_HOME/.env"
-chmod 600 "$N8N_HOME/.env"
+chmod 600 "$INSTALL_DIR/.env"
 
-# --- Khởi động n8n với pm2
-sudo -i -u n8n bash - <<EOF
-export NVM_DIR="\$HOME/.nvm"
-[ -s "\$NVM_DIR/nvm.sh" ] && \. "\$NVM_DIR/nvm.sh"
-cd ~
-pm2 start ./node_modules/n8n/bin/n8n --name n8n || pm2 restart n8n
-pm2 save
-EOF
+# Cài PM2 và cấu hình auto-start
+npm install -g pm2 || { echo "❌ Lỗi cài PM2"; exit 1; }
+pm2 start ./node_modules/n8n/bin/n8n --name n8n || { echo "❌ Lỗi khởi động n8n với PM2"; exit 1; }
+pm2 startup systemd -u root --hp /root || { echo "❌ Lỗi cấu hình PM2 startup"; exit 1; }
+pm2 save || { echo "❌ Lỗi lưu cấu hình PM2"; exit 1; }
 
-# Cập nhật systemd và reload nginx
-systemctl daemon-reload
-
-# --- Cấu hình Nginx
-NGINX_CONF="/etc/nginx/sites-available/$DOMAIN"
-
-cat > "$NGINX_CONF" <<EOT
+# Cấu hình Nginx
+echo "🌐 Cấu hình Nginx..."
+cat <<EOT > /etc/nginx/sites-available/$DOMAIN
 server {
     listen 80;
     server_name $DOMAIN;
@@ -172,19 +137,16 @@ server {
 }
 EOT
 
-ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/
+ln -s /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/ || { echo "❌ Lỗi tạo symlink nginx"; exit 1; }
+nginx -t || { echo "❌ Lỗi cấu hình nginx!"; exit 1; }
+systemctl reload nginx || { echo "❌ Lỗi reload nginx"; exit 1; }
 
-nginx -t
-systemctl reload nginx
+# Cài SSL
+echo "🔒 Đang xin SSL cho $DOMAIN..."
+certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "admin@$DOMAIN" \
+  || { echo "❌ Lỗi cài SSL"; exit 1; }
 
-# --- Cài SSL Letsencrypt
-echo "🔒 Xin và cài SSL cho $DOMAIN..."
-certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "admin@$DOMAIN" || {
-  echo "❌ Lỗi cài SSL"
-  exit 1
-}
-
-echo "✅ Hoàn tất cài đặt n8n!"
-echo "👉 Truy cập https://$DOMAIN"
-
-exit 0
+# Hoàn tất
+echo "✅ Cài đặt hoàn tất!"
+echo "➡️ Truy cập: https://$DOMAIN"
+echo "📝 Lần đầu tiên, vui lòng tạo tài khoản admin với email, tên và mật khẩu của bạn."

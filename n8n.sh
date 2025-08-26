@@ -45,25 +45,28 @@ if [ ! -d "$N8N_HOME/.nvm" ]; then
 fi
 
 # Cài node 22 và npm, n8n, pm2, tất cả dưới user n8n
-run_as_n8n "
-  export NVM_DIR=\"\$HOME/.nvm\"
-  source \"\$NVM_DIR/nvm.sh\"
-  
-  nvm install 22
-  nvm alias default 22
-  
-  npm install -g npm@latest
-  
-  cd ~
-  if [ ! -f package.json ]; then
-    npm init -y
-  fi
-  
-  npm install n8n@latest
-  npm install -g pm2@latest
-  
-  pm2 startup systemd -u n8n --hp /home/n8n
-"
+run_as_n8n() {
+  sudo -i -u n8n bash - <<'EOF'
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+nvm install 22
+nvm alias default 22
+
+npm install -g npm@latest
+
+cd ~
+
+if [ ! -f package.json ]; then
+  npm init -y
+fi
+
+npm install n8n@latest
+npm install -g pm2@latest
+
+pm2 startup systemd -u n8n --hp /home/n8n
+EOF
+}
 
 # 🗃 Tạo database và user PostgreSQL
 echo "🗃 Tạo database và user PostgreSQL cho n8n..."
@@ -105,8 +108,8 @@ fi
 
 if [[ "$DOMAIN_IP" == "$SERVER_IP" ]]; then
   echo "✅ Domain trỏ đúng về IP server."
-elif [[ "$DOMAIN_IP" == "127.0.0.1" ]]; then
-  echo "⚠️ Domain trỏ về localhost (127.0.0.1). Tiếp tục cài đặt..."
+elif [[ "$DOMAIN_IP" == "127.0.1.1" ]]; then
+  echo "⚠️ Domain trỏ về localhost (127.0.1.1). Tiếp tục cài đặt..."
 else
   echo "❌ Domain $DOMAIN trỏ tới IP $DOMAIN_IP, không trùng IP server ($SERVER_IP) hoặc localhost. Vui lòng kiểm tra DNS."
   exit 1

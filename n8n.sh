@@ -30,33 +30,28 @@ N8N_HOME="/home/n8n"
 # **📥 Cài nvm, Node.js 22, npm, n8n và pm2 dưới user n8n**
 echo "⬇️ Cài đặt nvm, Node.js 22, n8n và PM2 dưới user n8n..."  
 
-# **Hàm chạy lệnh dưới user n8n**
-run_as_n8n() {  
-    sudo -i -u n8n bash -c "$1"  
-}
-
 # **Cài nvm nếu chưa có**
 if [ ! -d "$N8N_HOME/.nvm" ]; then  
     echo "📦 Đang cài đặt nvm cho user n8n..."  
-    run_as_n8n "git clone https://github.com/nvm-sh/nvm.git ~/.nvm && cd ~/.nvm && git checkout v0.39.4"
+    sudo -i -u n8n bash -c "git clone https://github.com/nvm-sh/nvm.git ~/.nvm && cd ~/.nvm && git checkout v0.39.4"
     # **Thêm vào profile**
-    echo 'export NVM_DIR=\"$HOME/.nvm\"' >> "$N8N_HOME/.bashrc"  
-    echo '[ -s \"$NVM_DIR/nvm.sh\" ] && . \"$NVM_DIR/nvm.sh\"' >> "$N8N_HOME/.bashrc"  
-    echo '[ -s \"$NVM_DIR/bash_completion\" ] && . \"$NVM_DIR/bash_completion\"' >> "$N8N_HOME/.bashrc"
+    sudo -i -u n8n bash -c 'echo "export NVM_DIR=\"\$HOME/.nvm\"" >> ~/.bashrc'
+    sudo -i -u n8n bash -c 'echo "[ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"" >> ~/.bashrc'
+    sudo -i -u n8n bash -c 'echo "[ -s \"\$NVM_DIR/bash_completion\" ] && . \"\$NVM_DIR/bash_completion\"" >> ~/.bashrc'
 fi
 
 # **Cài node 22 và npm, n8n, pm2**
 echo "📦 Cài đặt Node.js 22 và các package cần thiết..."
-run_as_n8n "
-export NVM_DIR=\"\$HOME/.nvm\"
-[ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"
+sudo -i -u n8n bash -c '
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 nvm install 22
 nvm use 22
 nvm alias default 22
 npm install -g npm@latest
 npm install -g n8n@latest
 npm install -g pm2@latest
-"
+'
 
 # **🗃 Tạo database và user PostgreSQL**
 echo "🗃 Tạo database và user PostgreSQL cho n8n..."  
@@ -113,32 +108,33 @@ fi
 
 # **Tạo file .env dưới user n8n**
 echo "📝 Tạo file cấu hình .env..."
-cat > "$N8N_HOME/.env" <<EOT  
-DB_TYPE=postgresdb  
-DB_POSTGRESDB_HOST=localhost  
-DB_POSTGRESDB_PORT=5432  
-DB_POSTGRESDB_DATABASE=$DB_NAME  
-DB_POSTGRESDB_USER=$DB_USER  
-DB_POSTGRESDB_PASSWORD=$DB_PASS  
-N8N_BASIC_AUTH_ACTIVE=false  
-N8N_HOST=$DOMAIN  
-N8N_PORT=5678  
-WEBHOOK_URL=https://$DOMAIN/  
-EOT  
+sudo -i -u n8n bash -c "cat > ~/.env << EOT
+DB_TYPE=postgresdb
+DB_POSTGRESDB_HOST=localhost
+DB_POSTGRESDB_PORT=5432
+DB_POSTGRESDB_DATABASE=$DB_NAME
+DB_POSTGRESDB_USER=$DB_USER
+DB_POSTGRESDB_PASSWORD=$DB_PASS
+N8N_BASIC_AUTH_ACTIVE=false
+N8N_HOST=$DOMAIN
+N8N_PORT=5678
+WEBHOOK_URL=https://$DOMAIN/
+EOT"
 
-chown n8n:n8n "$N8N_HOME/.env"  
-chmod 600 "$N8N_HOME/.env"
+sudo -i -u n8n bash -c "chmod 600 ~/.env"
 
 # **🖥 Khởi chạy n8n với pm2, user n8n**
 echo "🚀 Khởi động n8n với PM2 dưới user n8n..."  
-run_as_n8n "
-export NVM_DIR=\"\$HOME/.nvm\"
-[ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"
-cd ~
+sudo -i -u n8n bash -c '
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 pm2 start n8n --name n8n -- --config=/home/n8n/.env
 pm2 save
-pm2 startup systemd -u n8n --hp /home/n8n
-"
+'
+
+# **Tạo systemd service cho pm2**
+echo "🔧 Tạo systemd service cho PM2..."
+sudo -i -u n8n bash -c 'pm2 startup systemd -u n8n --hp /home/n8n'
 
 # **🌐 Cấu hình Nginx proxy**
 echo "🌐 Cấu hình Nginx cho $DOMAIN..."  
@@ -177,7 +173,7 @@ certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "legiang360@gmail.
 # **Khởi động lại services**
 echo "🔄 Khởi động lại services..."
 systemctl restart nginx
-run_as_n8n "pm2 restart n8n"
+sudo -i -u n8n bash -c 'pm2 restart n8n'
 
 echo "✅ Cài đặt n8n hoàn tất!"  
 echo "➡️ Truy cập https://$DOMAIN"  

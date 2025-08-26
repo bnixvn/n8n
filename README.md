@@ -14,11 +14,7 @@ sudo -i -u n8n bash
 cd ~
 export NVM_DIR="$HOME/.nvm"
 source "$NVM_DIR/nvm.sh"
-
-# Cập nhật n8n
 npm install n8n@latest
-
-# Khởi động lại pm2
 pm2 restart n8n
 </pre>
 <h2>Bản script của bạn tự động làm những việc sau: </h2>

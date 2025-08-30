@@ -20,21 +20,21 @@ curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
 apt install -y nodejs nginx build-essential certbot python3-certbot-nginx \
                postgresql postgresql-contrib
 
-echo "Tạo user và database PostgreSQL cho n8n..."
-sudo -u postgres psql <<EOF
+echo "Tạo user và database PostgreSQL cho n8n (đang tránh lỗi quyền)..."
+sudo -u postgres bash -c "cd /tmp && psql <<EOF
 CREATE USER $DB_USER WITH PASSWORD '$DB_PASS';
 CREATE DATABASE $DB_NAME OWNER $DB_USER;
 GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;
-EOF
+EOF"
 
 echo "Cài n8n và PM2..."
 npm install -g n8n pm2
 
-# Tạo thư mục .n8n nếu chưa có
-mkdir -p ~/.n8n
+echo "Tạo thư mục /root/n8n nếu chưa có..."
+mkdir -p /root/n8n
 
-echo "Tạo file .env cấu hình cho n8n..."
-cat > ~/.n8n/.env <<EOL
+echo "Tạo file .env cấu hình cho n8n vào /root/n8n/.env"
+cat > /root/n8n/.env <<EOL
 DB_TYPE=postgresdb
 DB_POSTGRESDB_HOST=$DB_HOST
 DB_POSTGRESDB_PORT=$DB_PORT
@@ -48,11 +48,22 @@ N8N_PROTOCOL=https
 WEBHOOK_URL=https://$DOMAIN
 EOL
 
-echo "Khởi động n8n với PM2 sử dụng file .env..."
-pm2 start n8n --name n8n -- --env-file ~/.n8n/.env
-pm2 save && pm2 startup
+# Đảm bảo quyền cho thư mục và file
+chown -R root:root /root/n8n
+chmod 600 /root/n8n/.env
 
-echo "Cấu hình Nginx proxy..."
+echo "Load biến môi trường từ file .env và khởi động n8n bằng PM2..."
+
+# Load biến môi trường từ .env rồi start PM2
+set -a
+source /root/n8n/.env
+set +a
+
+pm2 start n8n --name n8n
+pm2 save
+pm2 startup
+
+echo "Cấu hình Nginx proxy cho n8n..."
 cat >/etc/nginx/conf.d/n8n.conf <<EOL
 server {
     listen 80;
